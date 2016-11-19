@@ -1,0 +1,42 @@
+#!/bin/bash
+
+NAME=pun
+BIN=packages_update_notifier
+PREFIX=/usr
+DAEMON=$PREFIX/bin/${BIN}
+CONFIG=/etc/${NAME}/${NAME}.conf
+
+start() {
+    pid=$(pidof -o %PPID $BIN)
+    if [[ -z $pid ]]; then
+        echo "Start services: $NAME."
+        $DAEMON -c $CONFIG & 2>&1 >> /dev/null
+    else
+        echo "Services $NAME already running."
+    fi
+}
+
+stop() {
+    echo "Stop services: $NAME."
+    killall -9 $BIN 2> /dev/null
+}
+
+restart() {
+    stop
+    sleep 2
+    start
+}
+
+case $1 in
+'start')
+  start
+  ;;
+'stop')
+  stop
+  ;;
+'restart')
+  restart
+  ;;
+*)
+  echo "Usage $0 {start|stop|restart}"
+esac
