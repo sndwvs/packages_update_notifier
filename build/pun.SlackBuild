@@ -1,66 +1,73 @@
-#!/bin/sh
-
-# Slackware build script for pun
-
-#
-# Script created by mara <mara@fail.pp.ua>
-#
-
-PRGNAM=pun
-VERSION=${VERSION:-0.1}
-BUILD=${BUILD:-1}
-TAG=${TAG:-_SBo}
-
-ARCH=noarch
-
+#!/bin/bash
 CWD=$(pwd)
-TMP=${TMP:-/tmp/SBo}
-PKG=$TMP/package-$PRGNAM
-OUTPUT=${OUTPUT:-/tmp}
 
-if [ "$ARCH" = "i486" ]; then
-  SLKCFLAGS="-O2 -march=i486 -mtune=i686"
-  LIBDIRSUFFIX=""
-elif [ "$ARCH" = "i686" ]; then
-  SLKCFLAGS="-O2 -march=i686 -mtune=i686"
+NAME="pun"
+VERSION=${VERSION:-0.2}
+BUILD="1"
+PACKAGER="mara"
+ARCH="noarch"
+
+NUMJOBS=${NUMJOBS:-" -j$(grep -c ^processor /proc/cpuinfo 2>/dev/null) "}
+
+
+if [ "$ARCH" = "i686" ]; then
+  SLKCFLAGS="-O3 -march=i686 -mtune=i686"
   LIBDIRSUFFIX=""
 elif [ "$ARCH" = "x86_64" ]; then
-  SLKCFLAGS="-O2 -fPIC"
-  LIBDIRSUFFIX="64"
+  SLKCFLAGS="-O3 -fPIC"
+  LIBDIRSUFFIX=""
+elif [ "$ARCH" = "armv7hl" ]; then
+  SLKCFLAGS="-O3 -march=armv7-a -mfpu=vfpv3-d16"
+  LIBDIRSUFFIX=""
+elif [ "$ARCH" = "armv6hl" ]; then
+  SLKCFLAGS="-O3 -march=armv6 -mfpu=vfp -mfloat-abi=hard"
+  LIBDIRSUFFIX=""
+elif [ "$ARCH" = "armv5hl" ]; then
+  SLKCFLAGS="-O2 -mthumb -march=armv5te -mtune=arm1176jzf-s -mfpu=vfp -mfloat-abi=softfp"
+  LIBDIRSUFFIX=""
+elif [ "$ARCH" = "arm" ]; then
+  SLKCFLAGS="-O3 -march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard"
+  LIBDIRSUFFIX=""
 else
   SLKCFLAGS="-O2"
   LIBDIRSUFFIX=""
 fi
 
-set -e
+case "$ARCH" in
+    arm*) TARGET=$ARCH-slackware-linux-gnueabi ;;
+    *)    TARGET=$ARCH-slackware-linux ;;
+esac
 
+# Establishment tmp directory for
+PKG=/tmp/package-$NAME
 rm -rf $PKG
-mkdir -p $TMP $PKG $OUTPUT
-cd $TMP
-rm -rf $PRGNAM-$VERSION
-install -d  $PRGNAM-$VERSION
-cd $PRGNAM-$VERSION
+mkdir -p $PKG
+
+# Delete a directory previous build / create new and change rights
+#cd /tmp
+#rm -rf $NAME-$VERSION
+#cd $NAME-$VERSION
 chown -R root:root .
-find -L . \
- \( -perm 777 -o -perm 775 -o -perm 750 -o -perm 711 -o -perm 555 \
-  -o -perm 511 \) -exec chmod 755 {} \; -o \
- \( -perm 666 -o -perm 664 -o -perm 640 -o -perm 600 -o -perm 444 \
- -o -perm 440 -o -perm 400 \) -exec chmod 644 {} \;
+find . \
+ \( -perm 777 -o -perm 775 -o -perm 711 -o -perm 555 -o -perm 511 \) \
+ -exec chmod 755 {} \; -o \
+ \( -perm 666 -o -perm 664 -o -perm 600 -o -perm 444 -o -perm 440 -o -perm 400 \) \
+ -exec chmod 644 {} \;
+
 
 # install initscripts
 install -Dm 755 $CWD/rc.pun $PKG/etc/rc.d/rc.pun.new
 # install config file
 install -Dm 0644 $CWD/pun.conf $PKG/etc/pun/pun.conf.new
+# install blacklist
+install -Dm 0644 $CWD/blacklist $PKG/etc/pun/blacklist.new
 install -Dm 755 $CWD/packages_update_notifier $PKG/usr/bin/packages_update_notifier
 
-mkdir -p $PKG/usr/doc/$PRGNAM-$VERSION
-cat $CWD/$PRGNAM.SlackBuild > $PKG/usr/doc/$PRGNAM-$VERSION/$PRGNAM.SlackBuild
-cat $CWD/rc.$PRGNAM > $PKG/usr/doc/$PRGNAM-$VERSION/rc.$PRGNAM
-cat $CWD/$PRGNAM.conf > $PKG/usr/doc/$PRGNAM-$VERSION/$PRGNAM.conf.example
-
+# Description and installation script
 mkdir -p $PKG/install
+zcat $CWD/doinst.sh.gz > $PKG/install/doinst.sh
 cat $CWD/slack-desc > $PKG/install/slack-desc
-cat $CWD/doinst.sh > $PKG/install/doinst.sh
 
+# Package creation
 cd $PKG
-/sbin/makepkg -l y -c n $OUTPUT/$PRGNAM-$VERSION-$ARCH-$BUILD$TAG.${PKGTYPE:-tgz}
+makepkg -l n -c n /tmp/${NAME}-${VERSION}-${ARCH}-${BUILD}${PACKAGER}.txz
