@@ -6,7 +6,9 @@ main_init(){
     TMP=$(mktemp -dt packages.XXXXXX)
     MIRROR_PKG="$TMP/CHECKSUMS.md5"
     PKG_DIR="/var/log/packages"
-    PKG_INSTALL="install_packages.md5"
+    PKG_INSTALL="install_packages.log"
+    PKG_REMOTE="remote_packages.log"
+    PKG_DIFF="diff_packages.log"
     PKG_UPDATE=$(cat $CONFIG | grep '^PKG_UPDATE' | cut -d "=" -f2)
     BLACKLIST=$(cat $CONFIG | grep '^BLACKLIST' | cut -d "=" -f2)
     ICONS=("/usr/share/icons/oxygen/32x32/status/dialog-information.png" "/usr/share/icons/HighContrast/32x32/status/dialog-information.png")
@@ -19,28 +21,49 @@ main_init(){
     fi
 }
 
-local_packages(){
-    for name_pkg in $(ls ${PKG_DIR}); do
-	MD5=$(echo ${name_pkg} | md5sum | cut -d ' ' -f1)
-	NAME=$(echo ${name_pkg} | tr '-' '\n' | head -n -3 | tr '\n' '-' | sed 's:-$::')
-	echo -e ${MD5} "\t" ${name_pkg} "\t" ${NAME} >> ${TMP}/${PKG_INSTALL}
-    done
+
+
+
+get_name_pkg() {
+     [[ ! -z "$1" ]] && echo $(echo "$1" | rev | cut -f4- -d '-' | rev)
+}
+
+get_ver_pkg() {
+    [[ ! -z "$1" ]] && echo $(echo "$1" | rev | cut -f3 -d '-' | rev)
+}
+
+get_rel_pkg() {
+    [[ ! -z "$1" ]] && echo $(echo "$1" | rev | cut -f1 -d '-' | tr -cd "[0-9]" | rev)
+}
+
+local_packages() {
+    # get instaled packages
+    ls ${PKG_DIR} | grep -v "upgraded" | sort > ${TMP}/${PKG_INSTALL}
+}
+
+remote_packages() {
+    # get packages remote
+    grep -oP "(?<=\w\/)(.*)(?=\.t.z$)" ${MIRROR_PKG} | sort > ${TMP}/${PKG_REMOTE}
+}
+
+diff_packages() {
+    # get update packages
+    diff -Naur ${TMP}/${PKG_INSTALL} ${TMP}/${PKG_REMOTE} > ${TMP}/${PKG_DIFF}.tmp
+    cat ${TMP}/${PKG_DIFF}.tmp | rev | cut -f 4- -d '-' | rev | grep "^[+-]" > ${TMP}/${PKG_DIFF}
+#    | grep -oP "(?<=^[\+\-])(.*)(?>-([\d\w]*))$" 
+#    | rev | cut -f 4- -d '-' | rev > ${TMP}/${PKG_DIFF}
+    
+#    grep -v -f ${TMP}/${PKG_DIFF} ${BLACKLIST} > ${TMP}/00
 }
 
 find_updates(){
     if [[ ! $(cat ${BLACKLIST} | grep -x $1) ]];then
-	if [[ $(cat ${TMP}/${PKG_INSTALL} | awk '{print $3}' | grep -x $1) ]];then
-	    if [[ ! $(cat ${TMP}/${PKG_INSTALL} | awk '{print $1}' | grep -x $2) ]];then
-		echo -e $2 "\t" $3 >> ${PKG_UPDATE}
-		let count=${count}+1
-	    fi
-	fi
+    if [[ $(cat ${TMP}/${PKG_INSTALL} | awk '{print $3}' | grep -x $1) ]];then
+        if [[ ! $(cat ${TMP}/${PKG_INSTALL} | awk '{print $1}' | grep -x $2) ]];then
+        echo -e $2 "\t" $3 >> ${PKG_UPDATE}
+        let count=${count}+1
+        fi
     fi
-}
-
-rename_log(){
-    if [[ -f  ${PKG_UPDATE} ]]; then 
-        mv ${PKG_UPDATE} "${PKG_UPDATE}_$(date +%Y%m%d%H%M%S)"
     fi
 }
 
@@ -69,7 +92,6 @@ notify_desktop(){
 case "$1" in
     "-c")
       CONFIG=${2:-/etc/pun/pun.conf}
-      main_init
       ;;
     *)
       echo "$0 -c <configuration file> &"
@@ -82,9 +104,33 @@ esac
 while true; do
 
     main_init
-    rename_log
     local_packages
+    remote_packages
+   
+    diff_packages
 
+    while read pkg; do
+        if [[ ! $(grep -x "$pkg" "$BLACKLIST") && $(grep -x "[+-]$pkg" ${TMP}/${PKG_DIFF} | wc -l) -ge 2 ]]; then
+            pkg_install=$(grep "^$pkg" $TMP/$PKG_INSTALL)
+            ver=$(get_ver_pkg "$pkg_install")
+            rel=$(get_rel_pkg "$pkg_install")
+
+            pkg_remote=$(grep "^$pkg" $TMP/$PKG_REMOTE)
+            ver_remote=$(get_ver_pkg "$pkg_remote")
+            rel_remote=$(get_rel_pkg "$pkg_remote")
+
+            #echo "up:" $pkg
+            #echo $pkg_install $ver $rel "|" $pkg_remote $ver_remote $rel_remote
+
+            [[ $ver != $ver_remote && ! -z $ver_remote ]] && echo "update: $$pkg_install $ver $rel | $pkg_remote $ver_remote $rel_remote" >> l
+            [[ $ver == $ver_remote && $rel < $rel_remote && ! -z $rel_remote ]] && echo "upgrade: $pkg_install $ver $rel | $pkg_remote $ver_remote $rel_remote" >> l
+        fi
+        # remove the load on the CPU
+        #sleep 0.2
+    done < <((grep "^+" | sed "s/^[+-]//") < ${TMP}/${PKG_DIFF})
+#    done < <((rev | cut -f 4- -d '-' | rev) < ${TMP}/${PKG_INSTALL})
+
+exit
     for name_pkg in $(cat ${MIRROR_PKG} | grep asc | awk {'print $2'} | cut -d '/' -f3 | sed 's|.t.z.asc||'); do
         MD5=$(echo ${name_pkg} | md5sum | cut -d ' ' -f1)
         NAME=$(echo ${name_pkg} | tr '-' '\n' | head -n -3 | tr '\n' '-' | sed 's:-$::')
