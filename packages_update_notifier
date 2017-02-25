@@ -135,10 +135,9 @@ while true; do
             fi
         fi
         # remove the load on the CPU
-        #sleep 0.2
+        sleep 0.2
     # ^+ new packages as remote
     done < <((grep "^+" | sed "s/^[+-]//") < ${TMP}/${PKG_DIFF})
-#    done < <((rev | cut -f 4- -d '-' | rev) < ${TMP}/${PKG_INSTALL})
 
     rm -rf $TMP
 
