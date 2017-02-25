@@ -25,47 +25,47 @@ main_init(){
 
 
 get_name_pkg() {
-     [[ ! -z "$1" ]] && echo $(echo "$1" | rev | cut -f4- -d '-' | rev)
+     [[ ! -z "$1" ]] && echo $(echo $1 | awk '{print $1}')
 }
 
 get_ver_pkg() {
-    [[ ! -z "$1" ]] && echo $(echo "$1" | rev | cut -f3 -d '-' | rev)
+    [[ ! -z "$1" ]] && echo $(echo $1 | awk '{print $2}')
 }
 
 get_rel_pkg() {
-    [[ ! -z "$1" ]] && echo $(echo "$1" | rev | cut -f1 -d '-' | tr -cd "[0-9]" | rev)
+    [[ ! -z "$1" ]] && echo $(echo $1 | awk '{print $4}')
+}
+
+fix_pkg() {
+    [[ ! -z "$1" ]] && echo $(echo $1 | sed "s#\s#-#g")
 }
 
 local_packages() {
     # get instaled packages
-    ls ${PKG_DIR} | grep -v "upgraded" | sort > ${TMP}/${PKG_INSTALL}
+    ls ${PKG_DIR} | grep -v "upgraded" | sort | rev \
+        | sed -e "s#^\([[:alnum:]]*\)-\([[:alnum:]_]*\)-\([[:alnum:]_.]*\)-\(.*\)#\1\t\2\t\3\t\4#" \
+        | rev > ${TMP}/${PKG_INSTALL}
 }
 
 remote_packages() {
     # get packages remote
-    grep -oP "(?<=\w\/)(.*)(?=\.t.z$)" ${MIRROR_PKG} | sort > ${TMP}/${PKG_REMOTE}
+    grep -oP "(?<=\w\/)(.*)(?=\.t.z$)" ${MIRROR_PKG} | sort | rev \
+        | sed -e "s#^\([[:alnum:]]*\)-\([[:alnum:]_]*\)-\([[:alnum:]_.]*\)-\(.*\)#\1\t\2\t\3\t\4#" \
+        | rev > ${TMP}/${PKG_REMOTE}
 }
 
 diff_packages() {
     # get update packages
     diff -Naur ${TMP}/${PKG_INSTALL} ${TMP}/${PKG_REMOTE} > ${TMP}/${PKG_DIFF}.tmp
-    cat ${TMP}/${PKG_DIFF}.tmp | rev | cut -f 4- -d '-' | rev | grep "^[+-]" > ${TMP}/${PKG_DIFF}
-#    | grep -oP "(?<=^[\+\-])(.*)(?>-([\d\w]*))$" 
-#    | rev | cut -f 4- -d '-' | rev > ${TMP}/${PKG_DIFF}
-    
-#    grep -v -f ${TMP}/${PKG_DIFF} ${BLACKLIST} > ${TMP}/00
+    cat ${TMP}/${PKG_DIFF}.tmp | grep "^[+-]" | grep -v "^+++\|---" > ${TMP}/${PKG_DIFF}
 }
 
-find_updates(){
-    if [[ ! $(cat ${BLACKLIST} | grep -x $1) ]];then
-    if [[ $(cat ${TMP}/${PKG_INSTALL} | awk '{print $3}' | grep -x $1) ]];then
-        if [[ ! $(cat ${TMP}/${PKG_INSTALL} | awk '{print $1}' | grep -x $2) ]];then
-        echo -e $2 "\t" $3 >> ${PKG_UPDATE}
-        let count=${count}+1
-        fi
-    fi
+rename_log() {
+    if [[ -f  ${PKG_UPDATE} ]]; then 
+        mv ${PKG_UPDATE} "${PKG_UPDATE}_$(date +%Y%m%d%H%M%S)"
     fi
 }
+
 
 notify_desktop(){
     if [[ -f ${ICONS[0]} ]]; then  icon=${ICONS[0]}; else icon=${ICONS[1]}; fi
@@ -104,38 +104,41 @@ esac
 while true; do
 
     main_init
+    rename_log
     local_packages
     remote_packages
    
     diff_packages
 
     while read pkg; do
-        if [[ ! $(grep -x "$pkg" "$BLACKLIST") && $(grep -x "[+-]$pkg" ${TMP}/${PKG_DIFF} | wc -l) -ge 2 ]]; then
-            pkg_install=$(grep "^$pkg" $TMP/$PKG_INSTALL)
-            ver=$(get_ver_pkg "$pkg_install")
-            rel=$(get_rel_pkg "$pkg_install")
+        pkg_remote=$(get_name_pkg "$pkg")
+        ver_remote=$(get_ver_pkg "$pkg")
+        rel_remote=$(get_rel_pkg "$pkg")
 
-            pkg_remote=$(grep "^$pkg" $TMP/$PKG_REMOTE)
-            ver_remote=$(get_ver_pkg "$pkg_remote")
-            rel_remote=$(get_rel_pkg "$pkg_remote")
+        if [[ ! $(grep -x "$pkg_remote" "$BLACKLIST") && $(awk '{print $1}' ${TMP}/${PKG_DIFF} | grep -x "[+-]$pkg_remote" | wc -l) -ge 2 ]]; then
+            num=$(awk '{print $1}' $TMP/$PKG_INSTALL | grep -nx "$pkg_remote" | cut -f1 -d ":")
+            pkg_install=$(sed -n -e ${num}p $TMP/$PKG_INSTALL)
+            name_install=$(get_name_pkg "$pkg_install")
+            ver_install=$(get_ver_pkg "$pkg_install")
+            rel_install=$(get_rel_pkg "$pkg_install")
 
-            #echo "up:" $pkg
-            #echo $pkg_install $ver $rel "|" $pkg_remote $ver_remote $rel_remote
+            #echo "pkg:" $pkg_install
+            #echo "remote $pkg_remote | $ver_remote | $rel_remote =|= install $name_install | $ver_install | $rel_install"
 
-            [[ $ver != $ver_remote && ! -z $ver_remote ]] && echo "update: $$pkg_install $ver $rel | $pkg_remote $ver_remote $rel_remote" >> l
-            [[ $ver == $ver_remote && $rel < $rel_remote && ! -z $rel_remote ]] && echo "upgrade: $pkg_install $ver $rel | $pkg_remote $ver_remote $rel_remote" >> l
+            if [[ $ver != $ver_install && ! -z $ver_install ]]; then
+                ((count++))
+                echo -e $(fix_pkg "$pkg_install") "\t" $(fix_pkg "$pkg") >> ${PKG_UPDATE}
+            fi
+            if [[ $ver == $ver_install && $rel < $rel_install && ! -z $rel_install ]]; then
+                ((count++))
+                echo -e $(fix_pkg "$pkg_install") "\t" $(fix_pkg "$pkg") >> ${PKG_UPDATE}
+            fi
         fi
         # remove the load on the CPU
         #sleep 0.2
+    # ^+ new packages as remote
     done < <((grep "^+" | sed "s/^[+-]//") < ${TMP}/${PKG_DIFF})
 #    done < <((rev | cut -f 4- -d '-' | rev) < ${TMP}/${PKG_INSTALL})
-
-exit
-    for name_pkg in $(cat ${MIRROR_PKG} | grep asc | awk {'print $2'} | cut -d '/' -f3 | sed 's|.t.z.asc||'); do
-        MD5=$(echo ${name_pkg} | md5sum | cut -d ' ' -f1)
-        NAME=$(echo ${name_pkg} | tr '-' '\n' | head -n -3 | tr '\n' '-' | sed 's:-$::')
-        find_updates ${NAME} ${MD5} ${name_pkg}
-    done
 
     rm -rf $TMP
 
