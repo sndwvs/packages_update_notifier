@@ -13,7 +13,7 @@ main_init(){
     PKG_DIFF="diff_packages.log"
     PKG_UPDATE=$(get_parameter PKG_UPDATE)
     BLACKLIST=$(get_parameter BLACKLIST)
-    ICONS=("/usr/share/icons/oxygen/32x32/status/dialog-information.png" "/usr/share/icons/HighContrast/32x32/status/dialog-information.png")
+    ICONS=("/usr/share/icons/Adwaita/32x32/status/dialog-information-symbolic.symbolic.png" "/usr/share/icons/HighContrast/32x32/status/dialog-information.png")
     INTERVAL=$(get_parameter INTERVAL)
 
     wget -c "${MIRROR}$(echo ${MIRROR} | rev | tr '/' '\n' | head -n 2 | tr '\n' '-' | rev | cut -d '-' -f2 | sed 's:deepstyle\|slackwarearm:slackware:')/CHECKSUMS.md5" -P $TMP &>/dev/null
