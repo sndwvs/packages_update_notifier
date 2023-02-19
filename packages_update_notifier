@@ -13,7 +13,7 @@ main_init(){
     PKG_DIFF="diff_packages.log"
     ICONS=("/usr/share/icons/Adwaita/32x32/status/dialog-information-symbolic.symbolic.png" "/usr/share/icons/HighContrast/32x32/status/dialog-information.png")
 
-    wget -c "${MIRROR}$(echo ${MIRROR} | rev | tr '/' '\n' | head -n 2 | tr '\n' '-' | rev | cut -d '-' -f2 | sed 's:deepstyle\|slackwarearm:slackware:')/CHECKSUMS.md5" -P $TMP &>/dev/null
+    wget --no-check-certificate -c "${MIRROR}$(echo ${MIRROR} | rev | tr '/' '\n' | head -n 2 | tr '\n' '-' | rev | cut -d '-' -f2 | sed 's:deepstyle\|slackwarearm:slackware:')/CHECKSUMS.md5" -P $TMP &>/dev/null
 
     [[ ! -f ${BLACKLIST} ]] && touch ${BLACKLIST}
 }
