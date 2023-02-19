@@ -4,17 +4,14 @@
 
 
 main_init(){
-    MIRROR=$(get_parameter MIRROR)
+    source ${CONFIG}
     TMP=$(mktemp -dt packages.XXXXXX)
     MIRROR_PKG="$TMP/CHECKSUMS.md5"
     PKG_DIR="/var/log/packages"
     PKG_INSTALL="install_packages.log"
     PKG_REMOTE="remote_packages.log"
     PKG_DIFF="diff_packages.log"
-    PKG_UPDATE=$(get_parameter PKG_UPDATE)
-    BLACKLIST=$(get_parameter BLACKLIST)
     ICONS=("/usr/share/icons/Adwaita/32x32/status/dialog-information-symbolic.symbolic.png" "/usr/share/icons/HighContrast/32x32/status/dialog-information.png")
-    INTERVAL=$(get_parameter INTERVAL)
 
     wget -c "${MIRROR}$(echo ${MIRROR} | rev | tr '/' '\n' | head -n 2 | tr '\n' '-' | rev | cut -d '-' -f2 | sed 's:deepstyle\|slackwarearm:slackware:')/CHECKSUMS.md5" -P $TMP &>/dev/null
 
@@ -23,10 +20,6 @@ main_init(){
 
 
 
-
-get_parameter() {
-    [[ ! -z "$1" ]] && echo $(grep -oP "(?<=^$1=)(.*)" $CONFIG)
-}
 
 get_name_pkg() {
      [[ ! -z "$1" ]] && echo $(echo $1 | awk '{print $1}')
@@ -76,19 +69,8 @@ notify_desktop(){
 
 #    notify-send "System Message" "For your system updates available\n<b>${count}</b> packages" -i ${icon}
 
-    for i in $(who | awk '{print $1, $2}' | grep : | uniq);do
-        let c=c+1
-        if [[ $c == 1 ]];then
-            u=$i
-        else
-            d=$i
-        fi
-        if [[ $c == 2 ]];then
-            c=0
-            DISPLAY=$d; XAUTHORITY="$(cat /etc/passwd | grep $u | cut -d ":" -f6)/.Xauthority"; export DISPLAY XAUTHORITY
+    for u in $(who | awk '{print $1, $2}' | grep pts | cut -d ' ' -f1 | uniq);do
             su $u -c "notify-send \"System Message\" \"For your system updates available\n<b>${count}</b> packages\" -i ${icon}"
-            unset DISPLAY XAUTHORITY
-         fi
     done
 }
 
@@ -111,7 +93,6 @@ while true; do
     rename_log
     local_packages
     remote_packages
-   
     diff_packages
 
     while read pkg; do
@@ -121,6 +102,7 @@ while true; do
 
         if [[ ! $(grep -x "$pkg_remote" "$BLACKLIST") && $(awk '{print $1}' ${TMP}/${PKG_DIFF} | grep -x "[+-]$pkg_remote" | wc -l) -ge 2 ]]; then
             num=$(awk '{print $1}' $TMP/$PKG_INSTALL | grep -nx "$pkg_remote" | cut -f1 -d ":")
+            [[ -z $num ]] && continue
             pkg_install=$(sed -n -e ${num}p $TMP/$PKG_INSTALL)
             name_install=$(get_name_pkg "$pkg_install")
             ver_install=$(get_ver_pkg "$pkg_install")
